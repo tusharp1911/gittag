@@ -1,68 +1,41 @@
-#!/bin/bash
+#!/bin/sh
 
-# https://github.com/unegma/bash-functions/blob/main/update.sh
+# retrieve branch name
+BRANCH_NAME=$(git branch | sed -n '/\* /s///p')
 
-VERSION=""
+# remove prefix release
+REGEXP_RELEASE="release\/"
+VERSION_BRANCH=$(echo "$BRANCH_NAME" | sed "s/$REGEXP_RELEASE//") 
 
-#get parameters
-while getopts v: flag
-do
-  case "${flag}" in
-    v) VERSION=${OPTARG};;
-  esac
-done
+echo "Current version branch is $VERSION_BRANCH"
 
-#get highest tag number, and add 1.0.0 if doesn't exist
-CURRENT_VERSION=`git describe --abbrev=0 --tags 2>/dev/null`
+# retrieve the last commit on the branch
+VERSION=$(git describe --tags --match=$VERSION_BRANCH* --abbrev=0)
 
-if [[ $CURRENT_VERSION == '' ]]
-then
-  CURRENT_VERSION='1.0.0'
-fi
-echo "Current Version: $CURRENT_VERSION"
+# split into array
+VERSION_BITS=(${VERSION//./ })
 
-
-#replace . with space so can split into an array
-CURRENT_VERSION_PARTS=(${CURRENT_VERSION//./ })
-
-#get number parts
-VNUM1=${CURRENT_VERSION_PARTS[0]}
-VNUM2=${CURRENT_VERSION_PARTS[1]}
-VNUM3=${CURRENT_VERSION_PARTS[2]}
-
-if [[ $VERSION == 'major' ]]
-then
-  VNUM1=$((VNUM1+1))
-elif [[ $VERSION == 'minor' ]]
-then
-  VNUM2=$((VNUM2+1))
-elif [[ $VERSION == 'patch' ]]
-then
-  VNUM3=$((VNUM3+1))
-else
-  echo "No version type (https://semver.org/) or incorrect type specified, try: -v [major, minor, patch]"
-  exit 1
-fi
-
+#get number parts and increase last one by 1
+VNUM1=${VERSION_BITS[0]}
+VNUM2=${VERSION_BITS[1]}
+VNUM3=${VERSION_BITS[2]}
+VNUM3=$((VNUM3+1))
 
 #create new tag
 NEW_TAG="$VNUM1.$VNUM2.$VNUM3"
-echo "($VERSION) updating $CURRENT_VERSION to $NEW_TAG"
+
+echo "Updating $VERSION to $NEW_TAG"
 
 #get current hash and see if it already has a tag
 GIT_COMMIT=`git rev-parse HEAD`
-NEEDS_TAG=`git describe --contains $GIT_COMMIT 2>/dev/null`
+NEEDS_TAG=`git describe --contains $GIT_COMMIT`
 
-#only tag if no tag already
-#to publish, need to be logged in to npm, and with clean working directory: `npm login; git stash`
+#only tag if no tag already (would be better if the git describe command above could have a silent option)
 if [ -z "$NEEDS_TAG" ]; then
-  npm version $NEW_TAG
-  npm publish --access public
-  echo "Tagged with $NEW_TAG"
-  git push --tags
-  git push
+    echo "Tagged with $NEW_TAG (Ignoring fatal:cannot describe - this means commit is untagged) "
+    git tag $NEW_TAG
+    git push --tags
 else
-  echo "Already a tag on this commit"
-fi
+    echo "Already a tag on this commit"
 
-exit 0
+fi    
